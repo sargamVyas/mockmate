@@ -86,6 +86,41 @@ This table is separate from raw audio storage — it holds the *record* of the c
 ## Data Flow
 ![Data flow diagram](/images/data-flow-diagram.png)
 
+### Per-turn sequence
+ 
+1. `User -> Orchestrator`: `start(session_id, company, interview_type)`
+2. `Orchestrator -> DB`: fetch question → `question_text`
+3. `Orchestrator -> TTS`: `question_text` → `question_audio`
+4. `Orchestrator -> User`: plays `question_audio`
+5. `User`: **interact** (recording) → **submit** `(raw_audio)`
+6. `Orchestrator -> S3`: store `raw_audio` → `audio_ref`
+7. `Orchestrator -> STT`: `raw_audio` → `answer_text`
+8. `Orchestrator -> DB`: write row `{question, answer_text, audio_ref, timestamp}`
+### Parallel branch (from step 8)
+ 
+| Branch | Sync? | Steps |
+|---|---|---|
+| **SER scoring** | async — doesn't block next question | `raw_audio -> SER -> ser_score -> DB update` |
+| **Next question** | sync — user is waiting | `DB (history) -> LLM (+ answer_text) -> follow_up -> TTS -> audio -> User` |
+ 
+9. Loop repeats until questions exhausted or timer hits the type's limit
+### Data shapes at each hop
+ 
+| Hop | Payload |
+|---|---|
+| User → Orchestrator | `session_id`, `raw_audio` (bytes) |
+| Orchestrator → S3 | `raw_audio` (bytes) |
+| Orchestrator → STT | `raw_audio` (bytes) |
+| STT → Orchestrator | `answer_text` (string) |
+| Orchestrator → DB | structured row (see `answers` table schema above) |
+| Orchestrator → SER | `raw_audio` (bytes) |
+| SER → Orchestrator | `ser_score` (float/json) |
+| Orchestrator → LLM | `conversation_history` (list) + `answer_text` |
+| LLM → Orchestrator | `next_question` or `follow_up` (string) |
+| Orchestrator → TTS | question text (string) |
+| TTS → Orchestrator | audio (bytes) |
+ 
+
 **v1 decisions:**
 - Turn-based (record → submit), not real-time streaming
 - Stateful conversation (LLM sees full history within a session)
