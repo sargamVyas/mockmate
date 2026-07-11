@@ -84,7 +84,7 @@ This table is separate from raw audio storage — it holds the *record* of the c
 
 
 ## Data Flow
-![Data flow diagram](./images/data-flow-diagram.png)
+![Data flow diagram](/images/data-flow-diagram.png)
 
 **v1 decisions:**
 - Turn-based (record → submit), not real-time streaming
