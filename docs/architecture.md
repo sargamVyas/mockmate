@@ -39,11 +39,11 @@
 
 ## System Architecture
  
-!(/images/architecture_flow.png)
+![System Architecture](/images/architecture_flow.png)
 
 ### Components
  
-**Your application**
+**My application**
 - **Frontend (React)** — handles login, interview/company selection, interact/submit buttons, timer display
 - **Backend (FastAPI)** — single orchestrator. All requests from frontend go here first; backend is the only thing that talks to external services and the DB
 - **SER model (custom)** — your own speech emotion recognition model, called after each answer to score confidence/delivery
