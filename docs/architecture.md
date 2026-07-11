@@ -39,9 +39,11 @@
 
 ## System Architecture
  
+!(/images/architecture_flow.png)
+
 ### Components
  
-**My application**
+**Your application**
 - **Frontend (React)** — handles login, interview/company selection, interact/submit buttons, timer display
 - **Backend (FastAPI)** — single orchestrator. All requests from frontend go here first; backend is the only thing that talks to external services and the DB
 - **SER model (custom)** — your own speech emotion recognition model, called after each answer to score confidence/delivery
@@ -50,20 +52,35 @@
 - **TTS (ElevenLabs)** — converts question text to audio
 - **STT (Whisper)** — transcribes user's spoken answer to text
 **Storage**
-- **Session DB (Postgres)** — session state, config, conversation history
+- **Session DB (Postgres)** — session state, config
 - **Question bank (Postgres)** — static reference data: company + interview type + question text
+- **Answers table (Postgres)** — one row per question answered; this is the conversation history record
 - **Audio storage (S3)** — raw audio per answer, auto-expires after retention period
+### Answers table structure
+ 
+This table is separate from raw audio storage — it holds the *record* of the conversation, not the audio file itself. It's what feeds both the LLM's context (for follow-up questions) and the end-of-session feedback generation.
+ 
+| Field | Type | Purpose |
+|---|---|---|
+| `answer_id` | UUID (PK) | unique row identifier |
+| `session_id` | UUID (FK) | links back to the session |
+| `question_index` | int | which question this is within the session (0-indexed) |
+| `question_text` | text | the question actually asked (post-LLM framing) |
+| `answer_text` | text | transcribed answer from STT |
+| `audio_ref` | text | pointer/key to the raw audio file in S3 |
+| `ser_score` | json/float | emotion/confidence score from the SER model |
+| `timestamp` | datetime | when this answer was submitted |
+ 
 ### Flow summary
 1. Frontend sends interview type + company to backend on Start
-2. Backend queries question bank for the first question, sends text to LLM for framing, sends result to TTS → audio streamed back to frontend
-3. User hits Interact (recording starts) → Submit (recording stops, audio sent to backend)
-4. Backend sends audio to STT → transcribed text saved to Session DB → sent to SER model (async) → sent to LLM with conversation history for next question/follow-up
+2. Backend queries question bank for the first question, sends text to LLM for framing, sends result to TTS -> audio streamed back to frontend
+3. User hits Interact (recording starts) -> Submit (recording stops, audio sent to backend)
+4. Backend sends audio to STT -> transcribed text + question saved as a new row in the answers table -> audio sent to SER model (async) -> `ser_score` updated on that row -> conversation history (from answers table) sent to LLM for next question/follow-up
 5. Loop continues until questions exhausted or timer hits the type's limit
-6. On completion: LLM generates feedback from full conversation history + aggregated SER scores
-### Key design decision
-The backend is the **single point of contact** for the frontend — it fans out to LLM/TTS/STT/SER/DB internally. This keeps API keys server-side only and means the frontend never needs to know which third-party service is being used.
- 
-![Architecture diagram of mocktest flow](/images/architecture_flow.png)
+6. On completion: LLM generates feedback from full answers table history + aggregated SER scores
+### Key design decisions
+- The backend is the **single point of contact** for the frontend — it fans out to LLM/TTS/STT/SER/DB internally. This keeps API keys server-side only and means the frontend never needs to know which third-party service is being used.
+- The **answers table** is kept separate from raw audio storage — the DB holds the queryable conversation record (text + scores), while S3 holds the heavier binary audio files. This keeps the DB fast and lets audio expire independently without touching the conversation record.
 
 
 ## Data Flow
