@@ -63,38 +63,8 @@
 ### Key design decision
 The backend is the **single point of contact** for the frontend — it fans out to LLM/TTS/STT/SER/DB internally. This keeps API keys server-side only and means the frontend never needs to know which third-party service is being used.
  
+![Architecture diagram of mocktest flow](/images/architecture_flow.png)
 
-```mermaid
-graph TD
-    subgraph App["Your application"]
-        FE[FrontendReact app]
-        BE[BackendFastAPI orchestrator]
-        SER[SER modelCustom analysis]
-        FE --> BE
-        BE --> SER
-    end
-
-    subgraph External["External AI services"]
-        LLM[LLM - ClaudeConversation logic]
-        TTS[TTS - ElevenLabsQuestion audio]
-        STT[STT - WhisperAnswer transcription]
-    end
-
-    subgraph Storage["Storage"]
-        SDB[(Session DBPostgres)]
-        QDB[(Question bankPostgres)]
-        ANS[(Answers tablePostgres)]
-        S3[(Audio storageS3, auto-expires)]
-    end
-
-    BE --> LLM
-    BE --> TTS
-    BE --> STT
-    BE --> SDB
-    BE --> QDB
-    BE --> ANS
-    BE --> S3
-```
 
 ## Data Flow
 
